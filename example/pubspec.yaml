@@ -12,7 +12,7 @@ dependencies:
     path: ../
   flutter_timezone: 
     git: https://github.com/kumsumit/flutter_timezone.git
-  http: ^1.1.0
+  http: ^1.3.0
   image: 
     git: https://github.com/kumsumit/image.git
   path_provider:
@@ -36,9 +36,9 @@ flutter:
     - sound/
 
 environment:
-  sdk: ">=3.1.0 <4.0.0"
-  flutter: ">=3.13.0"
-  
+  sdk: ^3.7.0
+  flutter: ">=3.29.0"
+
 msix_config:
   display_name: Flutter Local Notifications Example
   identity_name: Com.Example.FlutterLocalNotificationsExample
