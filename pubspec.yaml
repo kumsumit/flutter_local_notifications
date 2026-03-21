@@ -52,5 +52,5 @@ flutter:
         default_package: flutter_local_notifications_web
 
 environment:
-  sdk: ^3.10.0
-  flutter: ">=3.38.1"
+  sdk: ^3.11.1
+  flutter: ">=3.41.1"
