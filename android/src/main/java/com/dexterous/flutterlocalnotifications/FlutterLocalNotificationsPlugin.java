@@ -92,7 +92,6 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 
 import io.flutter.FlutterInjector;
 import io.flutter.embedding.engine.loader.FlutterLoader;
@@ -158,9 +157,12 @@ public class FlutterLocalNotificationsPlugin
   private static final String SHOW_METHOD = "show";
   private static final String CANCEL_METHOD = "cancel";
   private static final String CANCEL_ALL_METHOD = "cancelAll";
+  private static final String CANCEL_ALL_PENDING_NOTIFICATIONS_METHOD =
+      "cancelAllPendingNotifications";
   private static final String ZONED_SCHEDULE_METHOD = "zonedSchedule";
   private static final String PERIODICALLY_SHOW_METHOD = "periodicallyShow";
-  private static final String PERIODICALLY_SHOW_WITH_DURATION = "periodicallyShowWithDuration";
+  private static final String PERIODICALLY_SHOW_WITH_DURATION_METHOD =
+      "periodicallyShowWithDuration";
   private static final String GET_NOTIFICATION_APP_LAUNCH_DETAILS_METHOD =
       "getNotificationAppLaunchDetails";
   private static final String REQUEST_NOTIFICATIONS_PERMISSION_METHOD =
@@ -235,7 +237,7 @@ public class FlutterLocalNotificationsPlugin
           scheduleNotification(context, notificationDetails, false);
         }
       } catch (ExactAlarmPermissionException e) {
-        Log.e(TAG, Objects.requireNonNull(e.getMessage()));
+        Log.e(TAG, e.getMessage());
         removeNotificationFromCache(context, notificationDetails.id);
       }
     }
@@ -331,7 +333,7 @@ public class FlutterLocalNotificationsPlugin
           }
         }
 
-        @SuppressLint({"UnspecifiedImmutableFlag", "WrongConstant"})
+        @SuppressLint("UnspecifiedImmutableFlag")
         final PendingIntent actionPendingIntent =
             action.showsUserInterface != null && action.showsUserInterface
                 ? PendingIntent.getActivity(context, requestCode++, actionIntent, actionFlags)
@@ -355,6 +357,10 @@ public class FlutterLocalNotificationsPlugin
           actionBuilder.setAllowGeneratedReplies(action.allowGeneratedReplies);
         }
 
+        if (action.semanticAction != null) {
+          actionBuilder.setSemanticAction(action.semanticAction);
+        }
+
         if (action.actionInputs != null) {
           for (NotificationActionInput input : action.actionInputs) {
             RemoteInput.Builder remoteInput =
@@ -374,7 +380,11 @@ public class FlutterLocalNotificationsPlugin
             actionBuilder.addRemoteInput(remoteInput.build());
           }
         }
-        builder.addAction(actionBuilder.build());
+        if (BooleanUtils.getValue(action.invisible)) {
+          builder.addInvisibleAction(actionBuilder.build());
+        } else {
+          builder.addAction(actionBuilder.build());
+        }
       }
     }
 
@@ -383,7 +393,7 @@ public class FlutterLocalNotificationsPlugin
         getBitmapFromSource(
             context, notificationDetails.largeIcon, notificationDetails.largeIconBitmapSource));
     if (notificationDetails.color != null) {
-      builder.setColor(notificationDetails.color);
+      builder.setColor(notificationDetails.color.intValue());
     }
 
     if (notificationDetails.colorized != null) {
@@ -434,7 +444,8 @@ public class FlutterLocalNotificationsPlugin
     setCategory(notificationDetails, builder);
     setTimeoutAfter(notificationDetails, builder);
     Notification notification = builder.build();
-    if (notificationDetails.additionalFlags != null) {
+    if (notificationDetails.additionalFlags != null
+        && notificationDetails.additionalFlags.length > 0) {
       for (int additionalFlag : notificationDetails.additionalFlags) {
         notification.flags |= additionalFlag;
       }
@@ -1099,13 +1110,9 @@ public class FlutterLocalNotificationsPlugin
   }
 
   private static void setMediaStyle(NotificationCompat.Builder builder) {
-      Notification.Style style =
-              null;
-      if (VERSION.SDK_INT >= VERSION_CODES.LOLLIPOP) {
-          style = new Notification.MediaStyle();
-//        builder.setStyle(style);
-      }
-
+    androidx.media.app.NotificationCompat.MediaStyle mediaStyle =
+        new androidx.media.app.NotificationCompat.MediaStyle();
+    builder.setStyle(mediaStyle);
   }
 
   private static void setMessagingStyle(
@@ -1211,7 +1218,7 @@ public class FlutterLocalNotificationsPlugin
       notificationChannel.setDescription(notificationChannelDetails.description);
       notificationChannel.setGroup(notificationChannelDetails.groupId);
       if (notificationChannelDetails.playSound) {
-        int audioAttributesUsage =
+        Integer audioAttributesUsage =
             notificationChannelDetails.audioAttributesUsage != null
                 ? notificationChannelDetails.audioAttributesUsage
                 : AudioAttributes.USAGE_NOTIFICATION;
@@ -1519,7 +1526,7 @@ public class FlutterLocalNotificationsPlugin
       case PERIODICALLY_SHOW_METHOD:
         repeat(call, result);
         break;
-      case PERIODICALLY_SHOW_WITH_DURATION:
+      case PERIODICALLY_SHOW_WITH_DURATION_METHOD:
         repeat(call, result);
         break;
       case CANCEL_METHOD:
@@ -1527,6 +1534,9 @@ public class FlutterLocalNotificationsPlugin
         break;
       case CANCEL_ALL_METHOD:
         cancelAllNotifications(result);
+        break;
+      case CANCEL_ALL_PENDING_NOTIFICATIONS_METHOD:
+        cancelAllPendingNotifications(result);
         break;
       case PENDING_NOTIFICATION_REQUESTS_METHOD:
         pendingNotificationRequests(result);
@@ -1612,6 +1622,7 @@ public class FlutterLocalNotificationsPlugin
         activeNotificationPayload.put("body", notification.extras.getCharSequence("android.text"));
         activeNotificationPayload.put(
             "bigText", notification.extras.getCharSequence("android.bigText"));
+
         activeNotificationsPayload.add(activeNotificationPayload);
       }
       result.success(activeNotificationsPayload);
@@ -1690,8 +1701,7 @@ public class FlutterLocalNotificationsPlugin
 
   private void initialize(MethodCall call, Result result) {
     Map<String, Object> arguments = call.arguments();
-      assert arguments != null;
-      String defaultIcon = (String) arguments.get(DEFAULT_ICON);
+    String defaultIcon = (String) arguments.get(DEFAULT_ICON);
     if (!isValidDrawableResource(
         applicationContext, defaultIcon, result, INVALID_ICON_ERROR_CODE)) {
       return;
@@ -1837,6 +1847,28 @@ public class FlutterLocalNotificationsPlugin
       PendingIntent pendingIntent =
           getBroadcastPendingIntent(applicationContext, scheduledNotification.id, intent);
       AlarmManager alarmManager = getAlarmManager(applicationContext);
+      alarmManager.cancel(pendingIntent);
+    }
+
+    saveScheduledNotifications(applicationContext, new ArrayList<>());
+    result.success(null);
+  }
+
+  private void cancelAllPendingNotifications(Result result) {
+    ArrayList<NotificationDetails> scheduledNotifications =
+        loadScheduledNotifications(applicationContext);
+
+    if (scheduledNotifications == null || scheduledNotifications.isEmpty()) {
+      result.success(null);
+      return;
+    }
+
+    AlarmManager alarmManager = getAlarmManager(applicationContext);
+    Intent intent = new Intent(applicationContext, ScheduledNotificationReceiver.class);
+
+    for (NotificationDetails scheduledNotification : scheduledNotifications) {
+      PendingIntent pendingIntent =
+          getBroadcastPendingIntent(applicationContext, scheduledNotification.id, intent);
       alarmManager.cancel(pendingIntent);
     }
 
@@ -2046,8 +2078,7 @@ public class FlutterLocalNotificationsPlugin
 
   private void createNotificationChannel(MethodCall call, Result result) {
     Map<String, Object> arguments = call.arguments();
-      assert arguments != null;
-      NotificationChannelDetails notificationChannelDetails =
+    NotificationChannelDetails notificationChannelDetails =
         NotificationChannelDetails.from(arguments);
     setupNotificationChannel(applicationContext, notificationChannelDetails);
     result.success(null);
@@ -2058,8 +2089,7 @@ public class FlutterLocalNotificationsPlugin
       NotificationManager notificationManager =
           (NotificationManager) applicationContext.getSystemService(Context.NOTIFICATION_SERVICE);
       String channelId = call.arguments();
-        assert notificationManager != null;
-        notificationManager.deleteNotificationChannel(channelId);
+      notificationManager.deleteNotificationChannel(channelId);
     }
     result.success(null);
   }
@@ -2112,6 +2142,12 @@ public class FlutterLocalNotificationsPlugin
         msgPayload.put("text", msg.getText());
         msgPayload.put("timestamp", msg.getTimestamp());
         msgPayload.put("person", describePerson(msg.getPerson()));
+        if (msg.getDataUri() != null) {
+          msgPayload.put("dataUri", msg.getDataUri().toString());
+        }
+        if (msg.getDataMimeType() != null) {
+          msgPayload.put("dataMimeType", msg.getDataMimeType());
+        }
         messagesPayload.add(msgPayload);
       }
       stylePayload.put("messages", messagesPayload);
@@ -2205,7 +2241,7 @@ public class FlutterLocalNotificationsPlugin
       } else {
         channelPayload.put("playSound", true);
         List<SoundSource> soundSources = Arrays.asList(SoundSource.values());
-        if (Objects.equals(soundUri.getScheme(), "android.resource")) {
+        if (soundUri.getScheme().equals("android.resource")) {
           String[] splitUri = soundUri.toString().split("/");
           String resource = splitUri[splitUri.length - 1];
           Integer resourceId = tryParseInt(resource);
@@ -2258,7 +2294,7 @@ public class FlutterLocalNotificationsPlugin
     Map<String, Object> notificationData = call.argument("notificationData");
     Integer startType = call.<Integer>argument("startType");
     ArrayList<Integer> foregroundServiceTypes = call.argument("foregroundServiceTypes");
-    if (foregroundServiceTypes == null || !foregroundServiceTypes.isEmpty()) {
+    if (foregroundServiceTypes == null || foregroundServiceTypes.size() != 0) {
       if (notificationData != null && startType != null) {
         NotificationDetails notificationDetails =
             extractNotificationDetails(result, notificationData);

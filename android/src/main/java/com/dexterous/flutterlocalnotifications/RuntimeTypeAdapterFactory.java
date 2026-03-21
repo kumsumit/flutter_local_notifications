@@ -277,7 +277,7 @@ public final class RuntimeTypeAdapterFactory<T> implements TypeAdapterFactory {
                   + typeFieldName);
         }
         JsonObject clone = new JsonObject();
-        if(label != null) clone.add(typeFieldName, new JsonPrimitive(label));
+        clone.add(typeFieldName, new JsonPrimitive(label));
         for (Map.Entry<String, JsonElement> e : jsonObject.entrySet()) {
           clone.add(e.getKey(), e.getValue());
         }
