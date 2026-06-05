@@ -43,6 +43,7 @@ import androidx.core.app.ActivityCompat;
 import androidx.core.app.AlarmManagerCompat;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationCompat.Action.Builder;
+import androidx.core.app.NotificationBuilderWithBuilderAccessor;
 import androidx.core.app.NotificationManagerCompat;
 import androidx.core.app.Person;
 import androidx.core.app.RemoteInput;
@@ -1110,9 +1111,15 @@ public class FlutterLocalNotificationsPlugin
   }
 
   private static void setMediaStyle(NotificationCompat.Builder builder) {
-    androidx.media.app.NotificationCompat.MediaStyle mediaStyle =
-        new androidx.media.app.NotificationCompat.MediaStyle();
-    builder.setStyle(mediaStyle);
+    builder.setCategory(NotificationCompat.CATEGORY_TRANSPORT);
+    builder.setStyle(new MediaNotificationStyle());
+  }
+
+  private static class MediaNotificationStyle extends NotificationCompat.Style {
+    @Override
+    public void apply(NotificationBuilderWithBuilderAccessor builder) {
+      builder.getBuilder().setStyle(new Notification.MediaStyle());
+    }
   }
 
   private static void setMessagingStyle(

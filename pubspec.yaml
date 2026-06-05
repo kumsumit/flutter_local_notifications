@@ -27,7 +27,7 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
-  mockito: ^5.6.3
+  mockito: ^5.7.0
   plugin_platform_interface:
     git: https://github.com/kumsumit/plugin_platform_interface.git
 
@@ -52,5 +52,5 @@ flutter:
         default_package: flutter_local_notifications_web
 
 environment:
-  sdk: ^3.11.1
-  flutter: ">=3.41.1"
+  sdk: ^3.12.0
+  flutter: ">=3.44.0"
