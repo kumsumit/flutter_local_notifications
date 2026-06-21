@@ -102,16 +102,16 @@ packages:
     description:
       path: "."
       ref: HEAD
-      resolved-ref: c65a14ff449006e4d192d1321d46f8248a04c96a
+      resolved-ref: d2d3e09a6f4786e1975c9ba6013483129d2a220f
       url: "https://github.com/kumsumit/dbus.dart.git"
     source: git
-    version: "0.7.12"
+    version: "0.7.14"
   device_info_plus:
     dependency: "direct main"
     description:
       path: "."
       ref: HEAD
-      resolved-ref: "6c7da3a509e79af5385ecd5856abcf07d1d07e9c"
+      resolved-ref: "73658baabe45f6f76c966b1fdd25b5e5c46f4075"
       url: "https://github.com/kumsumit/device_info_plus.git"
     source: git
     version: "13.1.0"
@@ -120,10 +120,10 @@ packages:
     description:
       path: "."
       ref: HEAD
-      resolved-ref: "3be62502fab67002dc88f10ecefe3bd76cdab15c"
+      resolved-ref: cf7c9d0010e315a321109931e4479f33bcd7e3d1
       url: "https://github.com/kumsumit/device_info_plus_platform_interface.git"
     source: git
-    version: "7.0.2"
+    version: "8.1.0"
   equatable:
     dependency: transitive
     description:
@@ -203,7 +203,7 @@ packages:
     description:
       path: "."
       ref: HEAD
-      resolved-ref: "83e50ebf0e4d10b1cce43db3d681e1243eda9764"
+      resolved-ref: "1190999113c1ffb72abcff5aa388e17beff6b1c8"
       url: "https://github.com/kumsumit/flutter_local_notifications_platform_interface.git"
     source: git
     version: "12.0.0-dev.1"
@@ -373,10 +373,10 @@ packages:
     dependency: transitive
     description:
       name: meta
-      sha256: df0c643f44ad098eb37988027a8e2b2b5a031fd3977f06bbfd3a76637e8df739
+      sha256: c82594181e3312f3d0695fc95aaaf7758d75b8d4ae2bbecf223b9fd5109a059d
       url: "https://pub.dev"
     source: hosted
-    version: "1.18.2"
+    version: "1.18.3"
   msix:
     dependency: "direct dev"
     description:
