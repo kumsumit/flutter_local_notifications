@@ -62,8 +62,20 @@ const String darwinNotificationCategoryText = 'textCategory';
 /// Defines a iOS/MacOS notification category for plain actions.
 const String darwinNotificationCategoryPlain = 'plainCategory';
 
+/// Defines a iOS/MacOS notification category that reports dismissals.
+const String dismissableNotificationCategory = 'dismissableCategory';
+
 @pragma('vm:entry-point')
 void notificationTapBackground(NotificationResponse notificationResponse) {
+  if (notificationResponse.notificationResponseType ==
+      NotificationResponseType.notificationDismissed) {
+    // ignore: avoid_print
+    print(
+      'notification(${notificationResponse.id}) dismissed on background isolate'
+      ' with payload: ${notificationResponse.payload}',
+    );
+    return;
+  }
   // ignore: avoid_print
   print(
     'notification(${notificationResponse.id}) action tapped: '
@@ -133,6 +145,14 @@ Future<void> main() async {
           ],
           options: <DarwinNotificationCategoryOption>{
             DarwinNotificationCategoryOption.hiddenPreviewShowTitle,
+          },
+        ),
+        const DarwinNotificationCategory(
+          dismissableNotificationCategory,
+          // The customDismissAction option is required for iOS/macOS to report
+          // when the user dismisses a notification belonging to this category.
+          options: <DarwinNotificationCategoryOption>{
+            DarwinNotificationCategoryOption.customDismissAction,
           },
         ),
       ];
@@ -286,7 +306,9 @@ class _HomePageState extends State<HomePage> {
               .resolvePlatformSpecificImplementation<
                 WebFlutterLocalNotificationsPlugin
               >();
-      final bool granted = webImplementation?.hasPermission ?? false;
+      final bool granted =
+          webImplementation?.permissionStatus ==
+          WebNotificationPermission.granted;
 
       setState(() {
         _notificationsEnabled = granted;
@@ -366,10 +388,44 @@ class _HomePageState extends State<HomePage> {
     await androidImplementation?.requestNotificationPolicyAccess();
   }
 
+  Future<void> _openAppNotificationSettings() async {
+    final bool opened =
+        await flutterLocalNotificationsPlugin.openAppNotificationSettings() ??
+        false;
+
+    if (!opened && mounted) {
+      await showDialog<void>(
+        context: context,
+        builder: (BuildContext context) => AlertDialog(
+          content: const Text(
+            'Unable to open the app notification settings screen on this device.',
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
   void _configureSelectNotificationSubject() {
     selectNotificationStream.stream.listen((
       NotificationResponse? response,
     ) async {
+      if (response?.notificationResponseType ==
+          NotificationResponseType.notificationDismissed) {
+        // ignore: avoid_print
+        print(
+          'notification(${response?.id}) dismissed on main isolate'
+          ' with payload: ${response?.payload}',
+        );
+        return;
+      }
       await Navigator.of(context).push(
         MaterialPageRoute<void>(
           builder: (BuildContext context) => SecondPage(
@@ -443,6 +499,26 @@ class _HomePageState extends State<HomePage> {
                 buttonText: 'Show plain notification with payload',
                 onPressed: () async {
                   await _showNotification();
+                },
+              ),
+              PaddedElevatedButton(
+                buttonText:
+                    'Show notification that reports its dismissal on '
+                    'the main isolate',
+                onPressed: () async {
+                  await _showDismissibleNotification(
+                    NotificationDismissedIsolate.main,
+                  );
+                },
+              ),
+              PaddedElevatedButton(
+                buttonText:
+                    'Show notification that reports its dismissal on '
+                    'a background isolate',
+                onPressed: () async {
+                  await _showDismissibleNotification(
+                    NotificationDismissedIsolate.background,
+                  );
                 },
               ),
               PaddedElevatedButton(
@@ -576,6 +652,10 @@ class _HomePageState extends State<HomePage> {
                   onPressed: _areNotifcationsEnabledOnAndroid,
                 ),
                 PaddedElevatedButton(
+                  buttonText: 'Open app notification settings',
+                  onPressed: _openAppNotificationSettings,
+                ),
+                PaddedElevatedButton(
                   buttonText: 'Request permission (API 33+)',
                   onPressed: () => _requestPermissions(),
                 ),
@@ -655,6 +735,14 @@ class _HomePageState extends State<HomePage> {
                       'on expand',
                   onPressed: () async {
                     await _showBigPictureNotificationHiddenLargeIcon();
+                  },
+                ),
+                PaddedElevatedButton(
+                  buttonText:
+                      'Show big picture notification, show big picture when '
+                      'collapsed (API 31+)',
+                  onPressed: () async {
+                    await _showBigPictureNotificationShowWhenCollapsed();
                   },
                 ),
                 PaddedElevatedButton(
@@ -852,6 +940,10 @@ class _HomePageState extends State<HomePage> {
                 PaddedElevatedButton(
                   buttonText: 'Request permission',
                   onPressed: _requestPermissions,
+                ),
+                PaddedElevatedButton(
+                  buttonText: 'Open notification settings',
+                  onPressed: _openAppNotificationSettings,
                 ),
                 PaddedElevatedButton(
                   buttonText:
@@ -1141,6 +1233,38 @@ class _HomePageState extends State<HomePage> {
       body: 'plain body',
       notificationDetails: notificationDetails,
       payload: 'item x',
+    );
+  }
+
+  Future<void> _showDismissibleNotification(
+    NotificationDismissedIsolate isolate,
+  ) async {
+    final AndroidNotificationDetails androidNotificationDetails =
+        AndroidNotificationDetails(
+          'your channel id',
+          'your channel name',
+          channelDescription: 'your channel description',
+          importance: Importance.max,
+          priority: Priority.high,
+          ticker: 'ticker',
+          dismissIsolate: isolate,
+        );
+    final DarwinNotificationDetails darwinNotificationDetails =
+        DarwinNotificationDetails(
+          categoryIdentifier: dismissableNotificationCategory,
+          dismissIsolate: isolate,
+        );
+    final NotificationDetails notificationDetails = NotificationDetails(
+      android: androidNotificationDetails,
+      iOS: darwinNotificationDetails,
+      macOS: darwinNotificationDetails,
+    );
+    await flutterLocalNotificationsPlugin.show(
+      id: id++,
+      title: 'dismiss me',
+      body: 'swipe me away to trigger a dismiss event',
+      notificationDetails: notificationDetails,
+      payload: 'dismissible item',
     );
   }
 
@@ -1884,6 +2008,44 @@ class _HomePageState extends State<HomePage> {
         BigPictureStyleInformation(
           FilePathAndroidBitmap(bigPicturePath),
           hideExpandedLargeIcon: true,
+          contentTitle: 'overridden <b>big</b> content title',
+          htmlFormatContentTitle: true,
+          summaryText: 'summary <i>text</i>',
+          htmlFormatSummaryText: true,
+        );
+    final AndroidNotificationDetails androidNotificationDetails =
+        AndroidNotificationDetails(
+          'big text channel id',
+          'big text channel name',
+          channelDescription: 'big text channel description',
+          largeIcon: FilePathAndroidBitmap(largeIconPath),
+          styleInformation: bigPictureStyleInformation,
+        );
+    final NotificationDetails notificationDetails = NotificationDetails(
+      android: androidNotificationDetails,
+    );
+    await flutterLocalNotificationsPlugin.show(
+      id: id++,
+      title: 'big text title',
+      body: 'silent body',
+      notificationDetails: notificationDetails,
+    );
+  }
+
+  Future<void> _showBigPictureNotificationShowWhenCollapsed() async {
+    final String largeIconPath = await _downloadAndSaveFile(
+      'https://dummyimage.com/48x48',
+      'largeIcon',
+    );
+    final String bigPicturePath = await _downloadAndSaveFile(
+      'https://dummyimage.com/400x800',
+      'bigPicture',
+    );
+    final BigPictureStyleInformation bigPictureStyleInformation =
+        BigPictureStyleInformation(
+          FilePathAndroidBitmap(bigPicturePath),
+          hideExpandedLargeIcon: true,
+          showBigPictureWhenCollapsed: true,
           contentTitle: 'overridden <b>big</b> content title',
           htmlFormatContentTitle: true,
           summaryText: 'summary <i>text</i>',

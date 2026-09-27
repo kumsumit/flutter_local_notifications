@@ -7,57 +7,48 @@ plugins {
 
 val localProperties = Properties()
 val localPropertiesFile = rootProject.file("local.properties")
-
 if (localPropertiesFile.exists()) {
-    localPropertiesFile.inputStream().use {
-        localProperties.load(it)
+    localPropertiesFile.reader(Charsets.UTF_8).use { reader ->
+        localProperties.load(reader)
     }
 }
 
-val flutterVersionCode =
-    localProperties.getProperty("flutter.versionCode") ?: "1"
-
-val flutterVersionName =
-    localProperties.getProperty("flutter.versionName") ?: "1.0"
+val flutterVersionCode = localProperties.getProperty("flutter.versionCode") ?: "1"
+val flutterVersionName = localProperties.getProperty("flutter.versionName") ?: "1.0"
 
 android {
     namespace = "com.dexterous.flutter_local_notifications_example"
     compileSdk = 37
-    ndkVersion = "30.0.14904198"
+    ndkVersion = flutter.ndkVersion
 
     sourceSets {
-        getByName("main") {
-            java.srcDir("src/main/kotlin")
-        }
+        getByName("main").java.srcDirs("src/main/kotlin")
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     compileOptions {
         isCoreLibraryDesugaringEnabled = true
-        sourceCompatibility = JavaVersion.VERSION_21
-        targetCompatibility = JavaVersion.VERSION_21
-    }
-
-    kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_17.toString()
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 
     defaultConfig {
+        multiDexEnabled = true
         applicationId = "com.dexterous.flutter_local_notifications_example"
-
         minSdk = flutter.minSdkVersion
-        targetSdk = 37
-
+        targetSdk = 36
         versionCode = flutterVersionCode.toInt()
         versionName = flutterVersionName
-
-        multiDexEnabled = true
-
-        testInstrumentationRunner =
-            "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
-        getByName("release") {
+        release {
+            // TODO: Add your own signing config for the release build.
+            // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
         }
     }
@@ -67,21 +58,18 @@ flutter {
     source = "../.."
 }
 
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+    }
+}
+
 dependencies {
-    implementation("androidx.window:window:1.5.1")
-    implementation("androidx.window:window-java:1.5.1")
+    implementation("androidx.window:window:1.0.0")
+    implementation("androidx.window:window-java:1.0.0")
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 
-    coreLibraryDesugaring(
-        "com.android.tools:desugar_jdk_libs:2.1.5"
-    )
-
-    testImplementation("junit:junit:4.13.2")
-
-    androidTestImplementation(
-        "androidx.test:runner:1.7.0"
-    )
-
-    androidTestImplementation(
-        "androidx.test.espresso:espresso-core:3.7.0"
-    )
+    testImplementation("junit:junit:4.12")
+    androidTestImplementation("androidx.test:runner:1.2.0")
+    androidTestImplementation("androidx.test.espresso:espresso-core:3.2.0")
 }

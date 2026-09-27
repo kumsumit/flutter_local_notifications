@@ -31,6 +31,8 @@ void main() {
               return <Map<String, Object>?>[];
             } else if (methodCall.method == 'getNotificationAppLaunchDetails') {
               return null;
+            } else if (methodCall.method == 'openAppNotificationSettings') {
+              return true;
             }
             return null;
           });
@@ -398,6 +400,7 @@ void main() {
               'categoryIdentifier': 'category1',
               'interruptionLevel': null,
               'criticalSoundVolume': 0.5,
+              'dismissIsolate': null,
             },
           },
         ),
@@ -476,6 +479,7 @@ void main() {
                     'categoryIdentifier': null,
                     'interruptionLevel': null,
                     'criticalSoundVolume': null,
+                    'dismissIsolate': null,
                   },
                 },
               ),
@@ -607,6 +611,7 @@ void main() {
                     'categoryIdentifier': null,
                     'interruptionLevel': null,
                     'criticalSoundVolume': null,
+                    'dismissIsolate': null,
                   },
                 },
               ),
@@ -690,6 +695,7 @@ void main() {
                 'categoryIdentifier': null,
                 'interruptionLevel': null,
                 'criticalSoundVolume': null,
+                'dismissIsolate': null,
               },
             },
           ),
@@ -771,6 +777,7 @@ void main() {
                 'categoryIdentifier': null,
                 'interruptionLevel': null,
                 'criticalSoundVolume': null,
+                'dismissIsolate': null,
               },
             },
           ),
@@ -853,6 +860,7 @@ void main() {
                 'categoryIdentifier': null,
                 'interruptionLevel': null,
                 'criticalSoundVolume': null,
+                'dismissIsolate': null,
               },
             },
           ),
@@ -916,6 +924,29 @@ void main() {
           >()!
           .checkPermissions();
       expect(log, <Matcher>[isMethodCall('checkPermissions', arguments: null)]);
+    });
+
+    test('openAppNotificationSettings', () async {
+      final bool? opened = await flutterLocalNotificationsPlugin
+          .resolvePlatformSpecificImplementation<
+            IOSFlutterLocalNotificationsPlugin
+          >()!
+          .openAppNotificationSettings();
+      expect(opened, isTrue);
+      expect(
+        log.last,
+        isMethodCall('openAppNotificationSettings', arguments: null),
+      );
+    });
+
+    test('openAppNotificationSettings (cross-platform)', () async {
+      final bool? opened = await flutterLocalNotificationsPlugin
+          .openAppNotificationSettings();
+      expect(opened, isTrue);
+      expect(
+        log.last,
+        isMethodCall('openAppNotificationSettings', arguments: null),
+      );
     });
 
     test('cancel', () async {

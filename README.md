@@ -21,6 +21,7 @@ A cross platform plugin for displaying local notifications.
    - [Custom notification sounds](#custom-notification-sounds)
    - [macOS differences](#macos-differences)
    - [Linux limitations](#linux-limitations)
+   - [Web limitations](#web-limitations)
    - [Notification payload](#notification-payload)
 - **[📷 Screenshots](#-screenshots)**
 - **[👏 Acknowledgements](#-acknowledgements)**
@@ -36,6 +37,7 @@ A cross platform plugin for displaying local notifications.
 - **[🔧 iOS setup](#-ios-setup)**
    - [General setup](#general-setup)
    - [Handling notifications whilst the app is in the foreground](#handling-notifications-whilst-the-app-is-in-the-foreground)
+- **[🌐 Web Setup](#web-setup)**
 - **[❓ Usage](#-usage)**
    - [Notification Actions](#notification-actions)
    - [Example app](#example-app)
@@ -63,7 +65,7 @@ A cross platform plugin for displaying local notifications.
 * **Windows** Uses the [C++/WinRT](https://learn.microsoft.com/en-us/windows/uwp/cpp-and-winrt-apis/) implementation of [Toast Notifications](https://learn.microsoft.com/en-us/windows/apps/design/shell/tiles-and-notifications/toast-notifications-overview)
 * **Web** Uses the [Notifications API](https://developer.mozilla.org/en-US/docs/Web/API/Notifications_API)
 
-Note: the plugin requires Flutter SDK 3.38.1 at a minimum. The list of support platforms for Flutter 3.38.1 itself can be found [here](https://github.com/flutter/website/blob/6150d58df2f39275ffd589ba32f25557a27e2384/src/content/reference/supported-platforms.md?plain=1#L82)
+Note: the plugin requires Flutter SDK 3.44.0 at a minimum. The list of supported platforms for Flutter can be found [here](https://docs.flutter.dev/reference/supported-platforms)
 
 ## ✨ Features
 
@@ -101,11 +103,14 @@ Note: the plugin requires Flutter SDK 3.38.1 at a minimum. The list of support p
 * [Android] Full-screen intent notifications
 * [Android] Start a foreground service
 * [Android] Ability to check if notifications are enabled
+* [Android] Open app notification settings
 * [iOS (all supported versions) & macOS 10.14+] Request notification permissions and customise the permissions being requested around displaying notifications
 * [iOS 10+] Request CarPlay notification permissions for notifications to appear in CarPlay interface
 * [iOS 10 or newer and macOS 10.14 or newer] Display notifications with attachments
 * [iOS 12.0+] Support for custom notification settings UI via "Configure Notifications in <application name>" button in notification context menu (API available on macOS 10.14+ but UI button does not appear in practice)
 * [iOS and macOS 10.14 or newer] Ability to check if notifications are enabled with specific type check
+* [iOS 15.4+] Attempt to open the app's notification settings page (falls back to app settings on older iOS versions)
+* [macOS] Attempt to open the app's notification settings page (falls back to system settings notifications pane)
 * [Linux] Ability to to use themed/Flutter Assets icons and sound
 * [Linux] Ability to to set the category
 * [Linux] Configuring the urgency
@@ -175,6 +180,8 @@ The `onDidReceiveNotificationResponse` callback runs on the main isolate of the 
 
 - Browsers don't support scheduled or repeating notifications, and browsers on Android do not support custom vibration.
 
+For more details on browser compatibility, limitations, and troubleshooting, see the [`flutter_local_notifications_web` README](https://pub.dev/packages/flutter_local_notifications_web).
+
 ### Notification payload
 
 Due to some limitations on iOS with how it treats null values in dictionaries, a null notification payload is coalesced to an empty string behind the scenes on all platforms for consistency.
@@ -225,9 +232,12 @@ android {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
+}
 
-    kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_17.toString()
+// Only needed if your app has Kotlin sources
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
     }
 }
 
@@ -253,9 +263,12 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-  
-    kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_17.toString()
+}
+
+// Only needed if your app has Kotlin sources
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
     }
 }
 
@@ -265,14 +278,14 @@ dependencies {
 ```
 </details>
 
-Note that the plugin uses Android Gradle plugin (AGP) 8.11.1 to leverage this functionality so to err on the safe side, applications should aim to use the same version at a **minimum**. If your application uses a higher version then there's no need to use a lower AGP version. For a Flutter app using the legacy `apply` script syntax, this is specified in `android/build.gradle` and the main parts would look similar to the following
+Note that the plugin uses Android Gradle plugin (AGP) 9.1.1 to leverage this functionality so to err on the safe side, applications should aim to use the same version at a **minimum**. If your application uses a higher version then there's no need to use a lower AGP version. For a Flutter app using the legacy `apply` script syntax, this is specified in `android/build.gradle` and the main parts would look similar to the following
 
 ```gradle
 buildscript {
    ...
 
     dependencies {
-        classpath 'com.android.tools.build:gradle:8.11.1'
+        classpath 'com.android.tools.build:gradle:9.1.1'
         ...
     }
 ```
@@ -286,7 +299,7 @@ If your app is using the new declarative [Plugin DSL syntax](https://docs.flutte
 ```gradle
 plugins {
     ...
-    id 'com.android.application' version '8.11.1' apply false
+    id 'com.android.application' version '9.1.1' apply false
     ...
 }
 ```
@@ -299,12 +312,14 @@ plugins {
 ```kotlin
 plugins {
     ...
-    id("com.android.application") version "8.11.1" apply false
+    id("com.android.application") version "9.1.1" apply false
     ...
 }
 ```
 
 </details>
+
+AGP 9 and later use [built-in Kotlin](https://docs.flutter.dev/release/breaking-changes/migrate-to-built-in-kotlin) instead of applying the Kotlin Gradle Plugin (KGP) directly. If your app still applies the `kotlin-android`/`org.jetbrains.kotlin.android` plugin, follow Flutter's [migration guide for app developers](https://docs.flutter.dev/release/breaking-changes/migrate-to-built-in-kotlin/for-app-developers) to remove it and use the `kotlin { compilerOptions { ... } }` block shown above instead.
 
 There have been reports that enabling desugaring may result in a Flutter apps crashing on Android 12L and above. This would be an issue with Flutter itself, not the plugin. One possible fix is adding the [WindowManager library](https://developer.android.com/jetpack/androidx/releases/window) as a dependency:
 
@@ -336,14 +351,14 @@ dependencies {
 
 More information and other proposed solutions can be found in [Flutter issue #110658](https://github.com/flutter/flutter/issues/110658).
 
-The plugin also requires that the `compileSdk` in your application's Gradle file is set to 35 at a minimum:
+The plugin also requires that the `compileSdk` in your application's Gradle file is set to 37 at a minimum:
 
 <details>
 <summary>Groovy - build.gradle</summary>
 
 ```gradle
 android {
-    compileSdk 36
+    compileSdk 37
     ...
 }
 ```
@@ -355,7 +370,7 @@ android {
 
 ```kotlin
 android {
-    compileSdk = 36
+    compileSdk = 37
     ...
 }
 ```
@@ -498,13 +513,13 @@ await flutterLocalNotificationsPlugin.initialize(
 final webPlugin = flutterLocalNotificationsPlugin
     .resolvePlatformSpecificImplementation<WebFlutterLocalNotificationsPlugin>();
 
-if (webPlugin != null && !webPlugin.hasPermission) {
+if (webPlugin != null && webPlugin.permissionStatus != WebNotificationPermission.granted) {
   // IMPORTANT: Only call this after a button press!
   await webPlugin.requestNotificationsPermission();
 }
 ```
 
-Everything else works like the other platforms.
+Everything else works like the other platforms. For web-specific details such as browser compatibility, notes, and troubleshooting, see the [`flutter_local_notifications_web` README](https://pub.dev/packages/flutter_local_notifications_web).
 
 ## ❓ Usage
 
@@ -527,7 +542,7 @@ When the user selects a action, the plugin will start a **separate Flutter Engin
 Adjust `AppDelegate.m` and set the plugin registrant callback:
 
 If you're using Objective-C, add this function anywhere in AppDelegate.m:
-``` objc
+```objc
 // This is required for calling FlutterLocalNotificationsPlugin.setPluginRegistrantCallback method.
 #import <FlutterLocalNotificationsPlugin.h>
 ...
@@ -550,6 +565,7 @@ if your application has not been migrated to `UIScene` lifecycle as described [h
 
 If it has been migrated to `UIScene` lifecycle then register the callback in through `didInitializeImplicitFlutterEngine`
 
+```objc
 - (BOOL)application:(UIApplication *)application
     didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
    [GeneratedPluginRegistrant registerWithRegistry:self];
@@ -562,7 +578,7 @@ If it has been migrated to `UIScene` lifecycle then register the callback in thr
     // Add this method
     [FlutterLocalNotificationsPlugin setPluginRegistrantCallback:registerPlugins];
 }
-
+```
 
 For Swift, open the `AppDelegate.swift` and if your application has not been migrated to `UIScene` lifecycle, update the
 `didFinishLaunchingWithOptions` as follows where the commented code indicates the code to add in and why

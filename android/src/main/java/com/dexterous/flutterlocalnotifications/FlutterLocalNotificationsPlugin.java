@@ -43,7 +43,6 @@ import androidx.core.app.ActivityCompat;
 import androidx.core.app.AlarmManagerCompat;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationCompat.Action.Builder;
-import androidx.core.app.NotificationBuilderWithBuilderAccessor;
 import androidx.core.app.NotificationManagerCompat;
 import androidx.core.app.Person;
 import androidx.core.app.RemoteInput;
@@ -140,6 +139,7 @@ public class FlutterLocalNotificationsPlugin
   private static final String INITIALIZE_METHOD = "initialize";
   private static final String GET_CALLBACK_HANDLE_METHOD = "getCallbackHandle";
   private static final String ARE_NOTIFICATIONS_ENABLED_METHOD = "areNotificationsEnabled";
+  private static final String OPEN_APP_NOTIFICATION_SETTINGS_METHOD = "openAppNotificationSettings";
   private static final String CAN_SCHEDULE_EXACT_NOTIFICATIONS_METHOD =
       "canScheduleExactNotifications";
   private static final String CREATE_NOTIFICATION_CHANNEL_GROUP_METHOD =
@@ -212,6 +212,7 @@ public class FlutterLocalNotificationsPlugin
   static String NOTIFICATION_DETAILS = "notificationDetails";
   static Gson gson;
   private MethodChannel channel;
+  static MethodChannel liveChannel;
   private Context applicationContext;
   private Activity mainActivity;
   static final int NOTIFICATION_PERMISSION_REQUEST_CODE = 1;
@@ -298,6 +299,23 @@ public class FlutterLocalNotificationsPlugin
             .setOngoing(BooleanUtils.getValue(notificationDetails.ongoing))
             .setSilent(BooleanUtils.getValue(notificationDetails.silent))
             .setOnlyAlertOnce(BooleanUtils.getValue(notificationDetails.onlyAlertOnce));
+
+    if (notificationDetails.dismissIsolate != null) {
+      Intent deleteIntent = new Intent(context, ActionBroadcastReceiver.class);
+      deleteIntent.setAction(ActionBroadcastReceiver.ACTION_DISMISSED);
+      deleteIntent
+          .putExtra(NOTIFICATION_ID, notificationDetails.id)
+          .putExtra(NOTIFICATION_TAG, notificationDetails.tag)
+          .putExtra(PAYLOAD, notificationDetails.payload)
+          .putExtra(ActionBroadcastReceiver.DISMISS_ISOLATE, notificationDetails.dismissIsolate);
+      int deleteFlags = PendingIntent.FLAG_UPDATE_CURRENT;
+      if (VERSION.SDK_INT >= VERSION_CODES.M) {
+        deleteFlags |= PendingIntent.FLAG_IMMUTABLE;
+      }
+      PendingIntent deletePendingIntent =
+          PendingIntent.getBroadcast(context, notificationDetails.id, deleteIntent, deleteFlags);
+      builder.setDeleteIntent(deletePendingIntent);
+    }
 
     if (notificationDetails.actions != null) {
       // Space out request codes by 16 so even with 16 actions they won't clash
@@ -488,8 +506,31 @@ public class FlutterLocalNotificationsPlugin
       if (StringUtils.isNullOrEmpty(defaultIcon)) {
         // for backwards compatibility: this is for handling the old way references to the icon used
         // to be kept but should be removed in future
-        builder.setSmallIcon(notificationDetails.iconResourceId);
-
+        if (notificationDetails.iconResourceId != null) {
+          builder.setSmallIcon(notificationDetails.iconResourceId);
+        } else {
+          // No icon on the notification, no persisted default icon, and no legacy
+          // resource id (e.g. a notification serialized by an older version of the
+          // plugin that fires after an app update). Fall back to the application's
+          // own icon so delivery never crashes with an NPE unboxing a null
+          // iconResourceId. See https://github.com/MaikuB/flutter_local_notifications/issues/298
+          // Declaring android:icon is optional, so fall back again to a platform drawable
+          // when the application doesn't have an icon of its own: a notification with no
+          // valid small icon is rejected when it is posted.
+          int fallbackIcon = context.getApplicationInfo().icon;
+          if (fallbackIcon == 0) {
+            fallbackIcon = android.R.drawable.sym_def_app_icon;
+          }
+          Log.w(
+              TAG,
+              "Notification "
+                  + notificationDetails.id
+                  + " has no icon, no default icon has been persisted via initialize(), and no"
+                  + " legacy icon resource id. This can happen when a notification scheduled by an"
+                  + " older version of the plugin is delivered before initialize() has run on the"
+                  + " current install. Falling back to the application's icon.");
+          builder.setSmallIcon(fallbackIcon);
+        }
       } else {
         builder.setSmallIcon(getDrawableResourceId(context, defaultIcon));
       }
@@ -659,6 +700,10 @@ public class FlutterLocalNotificationsPlugin
 
     if (SELECT_FOREGROUND_NOTIFICATION_ACTION.equals(intent.getAction())) {
       notificationResponseMap.put(NOTIFICATION_RESPONSE_TYPE, 1);
+    }
+
+    if (ActionBroadcastReceiver.ACTION_DISMISSED.equals(intent.getAction())) {
+      notificationResponseMap.put(NOTIFICATION_RESPONSE_TYPE, 2);
     }
 
     return notificationResponseMap;
@@ -1080,6 +1125,10 @@ public class FlutterLocalNotificationsPlugin
             context,
             bigPictureStyleInformation.bigPicture,
             bigPictureStyleInformation.bigPictureBitmapSource));
+    if (VERSION.SDK_INT >= VERSION_CODES.S
+        && Boolean.TRUE.equals(bigPictureStyleInformation.showBigPictureWhenCollapsed)) {
+      bigPictureStyle.showBigPictureWhenCollapsed(true);
+    }
     builder.setStyle(bigPictureStyle);
   }
 
@@ -1111,15 +1160,9 @@ public class FlutterLocalNotificationsPlugin
   }
 
   private static void setMediaStyle(NotificationCompat.Builder builder) {
-    builder.setCategory(NotificationCompat.CATEGORY_TRANSPORT);
-    builder.setStyle(new MediaNotificationStyle());
-  }
-
-  private static class MediaNotificationStyle extends NotificationCompat.Style {
-    @Override
-    public void apply(NotificationBuilderWithBuilderAccessor builder) {
-      builder.getBuilder().setStyle(new Notification.MediaStyle());
-    }
+    androidx.media.app.NotificationCompat.MediaStyle mediaStyle =
+        new androidx.media.app.NotificationCompat.MediaStyle();
+    builder.setStyle(mediaStyle);
   }
 
   private static void setMessagingStyle(
@@ -1409,11 +1452,15 @@ public class FlutterLocalNotificationsPlugin
     this.applicationContext = binding.getApplicationContext();
     this.channel = new MethodChannel(binding.getBinaryMessenger(), METHOD_CHANNEL);
     this.channel.setMethodCallHandler(this);
+    liveChannel = this.channel;
   }
 
   @Override
   public void onDetachedFromEngine(@NonNull FlutterPluginBinding binding) {
     this.channel.setMethodCallHandler(null);
+    if (liveChannel == this.channel) {
+      liveChannel = null;
+    }
     this.channel = null;
     this.applicationContext = null;
   }
@@ -1550,6 +1597,9 @@ public class FlutterLocalNotificationsPlugin
         break;
       case ARE_NOTIFICATIONS_ENABLED_METHOD:
         areNotificationsEnabled(result);
+        break;
+      case OPEN_APP_NOTIFICATION_SETTINGS_METHOD:
+        openAppNotificationSettings(result);
         break;
       case CAN_SCHEDULE_EXACT_NOTIFICATIONS_METHOD:
         setCanScheduleExactNotifications(result);
@@ -1991,9 +2041,15 @@ public class FlutterLocalNotificationsPlugin
       permissionRequestProgress = PermissionRequestProgress.None;
     } else {
       permissionRequestProgress = PermissionRequestProgress.RequestingNotificationPolicyAccess;
-      mainActivity.startActivityForResult(
-          new Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS),
-          NOTIFICATION_POLICY_ACCESS_REQUEST_CODE);
+      // Highlights the app's row on the settings list.
+      String packageName = applicationContext.getPackageName();
+      Bundle highlightArgs = new Bundle();
+      highlightArgs.putString(":settings:fragment_args_key", packageName);
+      Intent intent =
+          new Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)
+              .putExtra(":settings:fragment_args_key", packageName)
+              .putExtra(":settings:show_fragment_args", highlightArgs);
+      mainActivity.startActivityForResult(intent, NOTIFICATION_POLICY_ACCESS_REQUEST_CODE);
     }
   }
 
@@ -2339,6 +2395,43 @@ public class FlutterLocalNotificationsPlugin
   private void areNotificationsEnabled(Result result) {
     NotificationManagerCompat notificationManager = getNotificationManager(applicationContext);
     result.success(notificationManager.areNotificationsEnabled());
+  }
+
+  private void openAppNotificationSettings(@NonNull Result result) {
+    final String packageName = applicationContext.getPackageName();
+    final PackageManager packageManager = applicationContext.getPackageManager();
+
+    Intent intent;
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+      intent = new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS);
+      intent.putExtra(Settings.EXTRA_APP_PACKAGE, packageName);
+    } else {
+      intent = new Intent("android.settings.APP_NOTIFICATION_SETTINGS");
+      intent.putExtra("app_package", packageName);
+      intent.putExtra("app_uid", applicationContext.getApplicationInfo().uid);
+    }
+
+    if (intent.resolveActivity(packageManager) == null) {
+      intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+      intent.setData(Uri.parse("package:" + packageName));
+    }
+
+    if (intent.resolveActivity(packageManager) == null) {
+      result.success(false);
+      return;
+    }
+
+    try {
+      if (mainActivity != null) {
+        mainActivity.startActivity(intent);
+      } else {
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        applicationContext.startActivity(intent);
+      }
+      result.success(true);
+    } catch (Exception e) {
+      result.success(false);
+    }
   }
 
   private void setCanScheduleExactNotifications(Result result) {
